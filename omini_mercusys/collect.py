@@ -108,7 +108,7 @@ def build(
                 fdb.append(FdbEntry(mac=cm, port="LAN"))
             elif kind == "wireless":
                 band = BANDS.get(str(c.get("connection_type") or ""))
-                label = BAND_NAMES.get(band or "", c.get("connection_type")) or ""
+                label = BAND_NAMES.get(band or "", "")  # nothing when the band is unknown
                 if c.get("interface") and c["interface"] != "main":
                     label = f"{label} ({c['interface']})".strip()
                 wifi.append(

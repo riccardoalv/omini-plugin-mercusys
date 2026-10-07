@@ -109,3 +109,12 @@ def test_waits_after_a_refused_login(halo, cfg):
     # The right password is tried at once.
     cfg["password"] = "secret"
     assert collect(cfg)
+
+
+def test_unknown_band_has_no_label(halo, cfg):
+    unit = next(k for k in halo.answers if k.startswith("client_list_"))
+    halo.answers[unit]["client_list"][0]["connection_type"] = "unknown"
+    devices = collect(cfg)
+    clients = [w for d in devices for w in d.wireless_clients or []]
+    assert all(w.interface != "unknown" for w in clients)
+    assert any(w.band is None and w.interface is None for w in clients)
