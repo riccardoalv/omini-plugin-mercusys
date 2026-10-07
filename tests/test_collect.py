@@ -182,3 +182,25 @@ def test_a_client_no_unit_lists_goes_to_the_main_unit(halo, cfg):
     [robson] = [w for w in main.wireless_clients if w.mac == "f4:b3:01:00:00:01"]
     assert robson.interface == "Casa · 5 GHz"
     assert not any(w.mac == "f4:b3:01:00:00:01" for w in sat.wireless_clients)
+
+
+def test_network_names_are_read_once_an_hour(halo, cfg):
+    collect(cfg)
+    collect(cfg)
+    assert halo.calls.count("wlan") == 1
+
+
+def test_a_read_that_times_out_is_tried_again(halo, cfg):
+    import httpx
+
+    real = halo.handler
+    slow = {"left": 1}
+
+    def handler(request):
+        if request.url.params.get("form") == "device_list" and slow["left"]:
+            slow["left"] -= 1
+            raise httpx.ReadTimeout("slow", request=request)
+        return real(request)
+
+    halo.handler = handler
+    assert collect(cfg)

@@ -116,7 +116,9 @@ def fixtures():
 def halo(monkeypatch, fixtures):
     fake = FakeHalo(fixtures)
     monkeypatch.setattr(
-        collect_module, "Client", partial(Client, transport=httpx.MockTransport(fake.handler))
+        collect_module,
+        "Client",
+        partial(Client, transport=httpx.MockTransport(lambda r: fake.handler(r))),
     )
     return fake
 

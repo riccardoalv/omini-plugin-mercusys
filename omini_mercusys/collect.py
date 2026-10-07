@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import base64
+import contextlib
+import json
 import re
+import time
 from typing import Any
 
 from omini_sdk import Config, Device, FdbEntry, Neighbor, PluginError, WirelessClient
@@ -91,6 +94,31 @@ def networks(wlan: dict[str, Any]) -> dict[tuple[str, str], str]:
             if ssid and (band, client_iface) not in out:
                 out[(band, client_iface)] = ssid
     return out
+
+
+NAMES_TTL_S = 3600  # network names rarely change: read them once an hour
+
+
+def network_names(c: Client, cfg: Config) -> dict[tuple[str, str], str]:
+    """The Wi-Fi network names, kept for an hour in the state folder."""
+    cache = cfg.state_dir / "networks.json" if cfg.state_dir else None
+    try:
+        if cache and cache.exists():
+            saved = json.loads(cache.read_text())
+            if time.time() - saved.get("at", 0) < NAMES_TTL_S:
+                return {tuple(k.split(" ", 1)): v for k, v in saved["names"].items()}
+    except (OSError, ValueError, KeyError):
+        pass
+    try:
+        names = networks(c.read("/admin/wireless", "wlan"))
+    except PluginError:
+        return {}  # names are a nicety
+    flat = {f"{b} {n}": s for (b, n), s in names.items()}
+    c.keep("wlan_names", flat)
+    if cache:
+        with contextlib.suppress(OSError):
+            cache.write_text(json.dumps({"at": time.time(), "names": flat}))
+    return names
 
 
 def unit_name(d: dict[str, Any]) -> str | None:
@@ -215,11 +243,7 @@ def collect(cfg: Config) -> list[Device]:
         )
         if missing and main:
             by_unit[main] = by_unit.get(main, []) + missing
-        try:
-            ssids = networks(c.read("/admin/wireless", "wlan"))
-            c.keep("wlan_names", {f"{b} {n}": s for (b, n), s in ssids.items()})
-        except PluginError:
-            ssids = {}  # names are a nicety
+        ssids = network_names(c, cfg)
         try:
             perf = c.read("/admin/network", "performance")
             c.keep("performance", perf)

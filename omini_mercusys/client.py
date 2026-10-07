@@ -106,14 +106,21 @@ class Client:
     # --- HTTP -------------------------------------------------------------------
 
     def _post(self, path: str, form: str, body: str) -> dict[str, Any]:
-        try:
-            r = self.http.post(path, params={"form": form}, content=body, headers=JSON)
-        except httpx.ConnectError as e:
-            raise PluginError(f"cannot connect to {self.base}: {e}") from e
-        except httpx.TimeoutException as e:
-            raise PluginError(f"{self.base} did not answer in time") from e
-        except httpx.HTTPError as e:
-            raise PluginError(f"request to {self.base} failed: {e}") from e
+        # A unit busy for a moment: reads are tried once more (never the login).
+        tries = 1 if form == "login" else 2
+        for attempt in range(tries):
+            try:
+                r = self.http.post(path, params={"form": form}, content=body, headers=JSON)
+                break
+            except httpx.ConnectError as e:
+                raise PluginError(f"cannot connect to {self.base}: {e}") from e
+            except httpx.TimeoutException as e:
+                if attempt + 1 < tries:
+                    log.info("%s did not answer %s in time, trying again", self.base, form)
+                    continue
+                raise PluginError(f"{self.base} did not answer in time") from e
+            except httpx.HTTPError as e:
+                raise PluginError(f"request to {self.base} failed: {e}") from e
         if r.status_code in (401, 403):
             raise SessionExpired(str(r.status_code))
         if r.status_code >= 400:
