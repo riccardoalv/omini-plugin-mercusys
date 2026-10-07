@@ -1,0 +1,6 @@
+{"client_list": [
+ {"mac": "11-22-33-44-55-01", "ip": "192.168.1.185", "name": "bW90by1nODYtNUc=", "online": true, "wire_type": "wireless", "connection_type": "band5", "interface": "main", "up_speed": 12500, "down_speed": 250000, "access_host": "AA-BB-CC-00-00-01"},
+ {"mac": "11-22-33-44-55-02", "ip": "192.168.1.41", "name": "QTM2LWRlLVJvc2FuZ2VsYQ==", "online": true, "wire_type": "wireless", "connection_type": "band2_4", "interface": "main", "up_speed": 0, "down_speed": 0, "access_host": "AA-BB-CC-00-00-02"},
+ {"mac": "11-22-33-44-55-03", "ip": "192.168.1.71", "name": "Um9ic29u", "online": true, "wire_type": "wired", "access_host": "AA-BB-CC-00-00-02"},
+ {"mac": "11-22-33-44-55-04", "ip": "192.168.1.99", "name": "b2xk", "online": false, "wire_type": "wireless", "connection_type": "band5", "access_host": "AA-BB-CC-00-00-01"}
+]}

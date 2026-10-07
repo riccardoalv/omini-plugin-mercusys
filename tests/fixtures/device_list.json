@@ -1,0 +1,4 @@
+{"device_list": [
+ {"mac": "AA-BB-CC-00-00-01", "device_ip": "192.168.1.121", "role": "master", "nickname": "living_room", "custom_nickname": null, "device_model": "Halo H60XS", "hardware_ver": "1.0", "software_ver": "1.2.0 Build 20260119", "inet_status": "online", "group_status": "connected", "connection_type": ["wired"]},
+ {"mac": "AA-BB-CC-00-00-02", "device_ip": "192.168.1.81", "role": "slave", "nickname": "office", "custom_nickname": "RXNjcml0w7NyaW8=", "device_model": "Halo H60XR", "hardware_ver": "1.0", "software_ver": "1.2.0 Build 20260119", "inet_status": "online", "group_status": "connected", "connection_type": ["band5"]}
+]}

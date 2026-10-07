@@ -1,0 +1,35 @@
+id: mercusys
+name: Mercusys Halo
+version: 0.1.0
+protocol: 1
+entrypoint: main.py
+timeout_s: 60
+description: >-
+  Mercusys Halo mesh systems (and TP-Link Deco units with the same local web
+  interface): every unit of the mesh, its Wi-Fi and wired clients with band,
+  names and rates, CPU and memory. Read-only.
+author: Omini
+homepage: https://github.com/riccardoalv/omini-plugin-mercusys
+fields:
+  - key: host
+    type: host
+    label: Address
+    required: true
+    help: The main unit's IP address (any unit of the mesh usually works), e.g. 192.168.1.121
+  - key: password
+    type: secret
+    label: Password
+    required: true
+    help: The password of the web interface (the same you use to sign in at https://<address>).
+  - key: username
+    type: string
+    label: Username
+    default: admin
+    group: Advanced
+    help: Mercusys and Deco sign in with a password only; leave "admin" unless your model asks for a user.
+  - key: verify_tls
+    type: bool
+    label: Verify the TLS certificate
+    default: false
+    group: Advanced
+    help: The units use a self-signed certificate.
