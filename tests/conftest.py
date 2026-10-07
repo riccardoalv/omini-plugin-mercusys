@@ -34,6 +34,7 @@ class FakeHalo:
         self.calls = []
         self.logins = 0
         self.aes = ("", "")
+        self.unlisted = []  # clients only the full list shows
 
     @staticmethod
     def pub(key):
@@ -89,6 +90,14 @@ class FakeHalo:
         assert payload["operation"] == "read", "only reads are sent"
         if form == "client_list":
             unit = payload["params"]["device_mac"].replace("-", "").replace(":", "").lower()
+            if unit == "default":  # everyone, plus those the units' lists leave out
+                everyone = [
+                    c
+                    for k, v in self.answers.items()
+                    if k.startswith("client_list_")
+                    for c in v["client_list"]
+                ] + self.unlisted
+                return answer({"error_code": 0, "result": {"client_list": everyone}})
             return answer({"error_code": 0, "result": self.answers[f"client_list_{unit}"]})
         if form not in self.answers:
             return answer({"error_code": -1, "msg": "no such callback"})

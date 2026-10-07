@@ -83,7 +83,7 @@ def test_only_reads(halo, cfg):
         "wlan",
         "performance",
     }
-    assert halo.calls.count("client_list") == 2  # one per unit
+    assert halo.calls.count("client_list") == 3  # one per unit, and the full list
 
 
 def test_connection_test(halo, cfg):
@@ -159,3 +159,22 @@ def test_without_network_names_the_band_is_enough(halo, cfg):
     devices = collect(cfg)
     labels = {w.interface for d in devices for w in d.wireless_clients or []}
     assert labels <= {"2.4 GHz", "5 GHz", "guest", None}
+
+
+def test_a_client_no_unit_lists_goes_to_the_main_unit(halo, cfg):
+    halo.unlisted = [
+        {
+            "mac": "F4-B3-01-00-00-01",
+            "ip": "192.168.1.71",
+            "name": "Um9ic29u",
+            "online": True,
+            "wire_type": "wireless",
+            "connection_type": "band5",
+            "interface": "main",
+            "access_host": "1",
+        }
+    ]
+    main, sat = collect(cfg)
+    [robson] = [w for w in main.wireless_clients if w.mac == "f4:b3:01:00:00:01"]
+    assert robson.interface == "Casa · 5 GHz"
+    assert not any(w.mac == "f4:b3:01:00:00:01" for w in sat.wireless_clients)

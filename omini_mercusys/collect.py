@@ -201,6 +201,17 @@ def collect(cfg: Config) -> list[Device]:
             answer = c.read("/admin/client", "client_list", {"device_mac": u["mac"]})
             by_unit[m] = answer.get("client_list") or []
             c.keep(f"client_list_{m.replace(':', '')}", by_unit[m])
+        # The full list has clients that no unit's list shows (seen on a
+        # Halo H60X): they go to the main unit, with their band and network.
+        everyone = c.read("/admin/client", "client_list", {"device_mac": "default"})
+        listed = {mac(x.get("mac")) for lst in by_unit.values() for x in lst}
+        missing = [x for x in everyone.get("client_list") or [] if mac(x.get("mac")) not in listed]
+        main = next(
+            (mac(u.get("mac")) for u in units if u.get("role") == "master"),
+            next(iter(by_unit), None),
+        )
+        if missing and main:
+            by_unit[main] = by_unit.get(main, []) + missing
         try:
             ssids = networks(c.read("/admin/wireless", "wlan"))
             c.keep("wlan_names", {f"{b} {n}": s for (b, n), s in ssids.items()})
