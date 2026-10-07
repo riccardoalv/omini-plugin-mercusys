@@ -226,20 +226,28 @@ class Client:
                 self.login()
             if self.session.cookie:
                 self.http.cookies.set("sysauth", self.session.cookie)
+            why: dict[str, Any] = {}
             try:
                 answer = self._post(
                     f"/cgi-bin/luci/;stok={self.session.stok}{path}",
                     form,
                     self.session.encode(payload),
                 )
+                why = {k: v for k, v in answer.items() if k != "data"}
                 data = self.session.decode(answer.get("data"))
-            except (SessionExpired, ValueError):
-                data = {}
+            except SessionExpired as e:
+                data, why = {}, {"http": str(e)}
+            except ValueError as e:
+                data, why = {}, {"undecodable": str(e)[:80]}
             code = data.get("error_code", data.get("errorcode"))
             if data and code in (0, None):
                 return data.get("result") or {}
             if not again:
                 raise PluginError(f"the unit refused to read {form} (error {code})")
+            # Why the saved session was refused (kept to understand the unit).
+            self.keep(
+                "session_refused", {"form": form, "code": code, **why, "msg": data.get("msg")}
+            )
             log.info("session expired, signing in again")
             self.session.stok = ""
         raise AssertionError("unreachable")
