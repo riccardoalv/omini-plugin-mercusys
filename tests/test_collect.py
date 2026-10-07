@@ -10,30 +10,42 @@ from omini_mercusys.collect import test as connection_test
 def test_one_access_point_per_unit(halo, cfg):
     main, sat = collect(cfg)
     assert (main.key, main.role, main.vendor, main.model, main.host) == (
-        "aa:bb:cc:00:00:01",
+        "30:16:9d:91:de:7f",
         "ap",
         "Mercusys",
-        "Halo H60XS",
-        "192.168.1.121",
+        "Halo H60XR",
+        "192.168.1.81",
     )
-    assert main.name == "Living Room" and sat.name == "Escritório"  # nickname / custom name
-    assert main.os_version == "1.2.0 Build 20260119"
-    # CPU and memory are the main unit's.
-    assert (main.cpu_pct, main.mem_pct) == (7.0, 46.0)
-    assert sat.cpu_pct is None
+    assert (main.name, sat.name) == ("Living Room", "Bedroom")
+    assert sat.os_version == "1.2.0 Build 20260119 Rel. 51031"
+    # CPU and memory are the unit Omini talks to (cfg: 192.168.1.121).
+    assert (sat.cpu_pct, sat.mem_pct) == (3.0, 35.0)
+    assert main.cpu_pct is None
+    # Wired backhaul: found through the switches, no mesh link drawn.
+    assert sat.neighbors is None
 
 
 def test_clients_on_the_unit_they_use(halo, cfg):
     main, sat = collect(cfg)
-    [phone] = main.wireless_clients  # the offline one is left out
-    assert (phone.mac, phone.band, phone.interface) == ("11:22:33:44:55:01", "5ghz", "5 GHz")
-    assert phone.tx_rate_mbps == 2.0 and phone.rx_rate_mbps == 0.1
-    assert [w.band for w in sat.wireless_clients] == ["2.4ghz"]
-    # Wired clients: behind the unit's LAN port.
-    assert [(f.mac, f.port) for f in sat.fdb] == [("11:22:33:44:55:03", "LAN")]
-    # The names given in the app.
-    names = {h.ip: h.hostnames for h in main.hosts + sat.hosts}
-    assert names["192.168.1.185"] == ["moto-g86-5G"] and names["192.168.1.71"] == ["Robson"]
+    assert len(main.wireless_clients) == 3 and len(sat.wireless_clients) == 6
+    assert {w.band for w in sat.wireless_clients} == {"2.4ghz", "5ghz"}
+    labels = {w.interface for w in main.wireless_clients + sat.wireless_clients}
+    assert "2.4 GHz (guest)" in labels  # the guest network is told apart
+    assert all(":" in w.mac for w in sat.wireless_clients)
+    # The names given in the app, for the map.
+    assert all(h.hostnames and h.sources == ["mercusys"] for h in sat.hosts)
+
+
+def test_wireless_backhaul_links_the_satellite_to_its_unit(halo, cfg):
+    units = halo.answers["device_list"]["device_list"]
+    units[1]["connection_type"] = ["band5"]
+    _, sat = collect(cfg)
+    [link] = sat.neighbors
+    assert (link.remote_mac, link.remote_port, link.protocol) == (
+        "30:16:9d:91:de:7f",
+        "5 GHz",
+        "other",
+    )
 
 
 def test_session_is_reused_between_collections(halo, cfg):
@@ -49,7 +61,7 @@ def test_signs_in_again_when_the_session_is_rejected(halo, cfg):
     collect(cfg)
     halo.stok = "rotated"  # e.g. the unit rebooted
     [main, _] = collect(cfg)
-    assert halo.logins == 2 and main.model == "Halo H60XS"
+    assert halo.logins == 2 and main.model == "Halo H60XR"
 
 
 def test_wrong_password(halo, cfg):
@@ -61,19 +73,39 @@ def test_wrong_password(halo, cfg):
 def test_only_reads(halo, cfg):
     collect(cfg)
     assert set(halo.calls) <= {"keys", "auth", "login", "device_list", "client_list", "performance"}
+    assert halo.calls.count("client_list") == 2  # one per unit
 
 
 def test_connection_test(halo, cfg):
-    assert connection_test(cfg) == "Connected: 2 unit(s) — Living Room, Escritório"
+    assert connection_test(cfg) == "Connected: 2 unit(s) — Living Room, Bedroom"
 
 
 def test_keeps_the_last_answers(halo, cfg):
     collect(cfg)
     kept = sorted(p.name for p in (cfg.state_dir / "pages").iterdir())
-    assert kept == ["client_list.json", "device_list.json", "performance.json"]
+    assert kept == [
+        "client_list_30169d91de7f.json",
+        "client_list_30169da6b324.json",
+        "device_list.json",
+        "login.json",
+        "performance.json",
+    ]
+    assert "stok" not in (cfg.state_dir / "pages" / "login.json").read_text()
 
 
 def test_helpers():
     assert mac("AA-BB-CC-00-00-01") == "aa:bb:cc:00:00:01" and mac("x") is None
     assert text("UGxheVN0YXRpb24=") == "PlayStation"
     assert text("plain name") == "plain name"
+
+
+def test_waits_after_a_refused_login(halo, cfg):
+    cfg["password"] = "nope"
+    with pytest.raises(PluginError, match="wrong password"):
+        collect(cfg)
+    with pytest.raises(PluginError, match="waiting a few minutes"):
+        collect(cfg)
+    assert halo.calls.count("login") == 1  # the unit is not asked again
+    # The right password is tried at once.
+    cfg["password"] = "secret"
+    assert collect(cfg)

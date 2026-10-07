@@ -6,7 +6,7 @@ import base64
 import re
 from typing import Any
 
-from omini_sdk import Config, Device, FdbEntry, PluginError, WirelessClient
+from omini_sdk import Config, Device, FdbEntry, Neighbor, PluginError, WirelessClient
 
 from omini_mercusys.client import Client
 
@@ -82,35 +82,39 @@ def unit_name(d: dict[str, Any]) -> str | None:
 
 
 def build(
-    units: list[dict[str, Any]], clients: list[dict[str, Any]], perf: dict[str, Any]
+    units: list[dict[str, Any]],
+    clients_by_unit: dict[str, list[dict[str, Any]]],
+    perf: dict[str, Any],
+    host: str,
 ) -> list[Device]:
-    by_unit: dict[str, list[dict[str, Any]]] = {}
-    main = next((mac(u.get("mac")) for u in units if u.get("role") == "master"), None)
-    for c in clients:
-        owner = mac(c.get("access_host")) or main
-        if owner:
-            by_unit.setdefault(owner, []).append(c)
-
+    """``clients_by_unit``: each unit's clients (by its MAC); ``perf`` is the
+    CPU and memory of the unit Omini talks to (``host``)."""
     devices = []
     for u in units:
         m = mac(u.get("mac"))
         if not m:
             continue
         model = u.get("device_model") or u.get("model")
-        mine = [c for c in by_unit.get(m, []) if c.get("online", True) is not False]
+        if model and not model.lower().startswith(("halo", "deco")):
+            model = f"Halo {model}" if str(u.get("device_type", "")).startswith("MER") else model
+        mine = [c for c in clients_by_unit.get(m, []) if c.get("online", True) is not False]
         wifi, fdb, hosts = [], [], []
         for c in mine:
             cm = mac(c.get("mac"))
             if not cm:
                 continue
-            if str(c.get("wire_type", "")).lower() == "wired":
+            kind = str(c.get("wire_type", "")).lower()
+            if kind == "wired":
                 fdb.append(FdbEntry(mac=cm, port="LAN"))
-            else:
+            elif kind == "wireless":
                 band = BANDS.get(str(c.get("connection_type") or ""))
+                label = BAND_NAMES.get(band or "", c.get("connection_type")) or ""
+                if c.get("interface") and c["interface"] != "main":
+                    label = f"{label} ({c['interface']})".strip()
                 wifi.append(
                     WirelessClient(
                         mac=cm,
-                        interface=BAND_NAMES.get(band or "", c.get("connection_type")) or None,
+                        interface=label or None,
                         band=band,
                         tx_rate_mbps=rate_mbps(c.get("down_speed")),
                         rx_rate_mbps=rate_mbps(c.get("up_speed")),
@@ -119,23 +123,39 @@ def build(
             name = text(c.get("name"))
             if Host is not None and c.get("ip") and name:
                 hosts.append(Host(ip=c["ip"], mac=cm, hostnames=[name], sources=["mercusys"]))
-        is_main = u.get("role") == "master"
+        # A satellite linked by Wi-Fi hangs from the unit it uses; one linked
+        # by cable is found through the switches like any wired device.
+        neighbors = None
+        backhaul = u.get("connection_type") or []
+        parent = mac(u.get("previous"))
+        if parent and parent != m and backhaul and "wired" not in backhaul:
+            band = BANDS.get(str(backhaul[0]), "")
+            neighbors = [
+                Neighbor(
+                    local_port="Wi-Fi backhaul",
+                    protocol="other",
+                    remote_mac=parent,
+                    remote_port=BAND_NAMES.get(band),
+                )
+            ]
+        here = u.get("device_ip") == host
         devices.append(
             Device(
                 key=m,
                 name=unit_name(u) or model or m,
                 host=u.get("device_ip") or None,
                 role="ap",
-                vendor="Mercusys",
+                vendor="Mercusys" if str(u.get("device_type", "")).startswith("MER") else None,
                 model=model,
                 os_version=u.get("software_ver") or None,
-                cpu_pct=pct(perf.get("cpu_usage")) if is_main else None,
-                mem_pct=pct(perf.get("mem_usage")) if is_main else None,
+                cpu_pct=pct(perf.get("cpu_usage")) if here else None,
+                mem_pct=pct(perf.get("mem_usage")) if here else None,
                 macs=[m],
                 ips=[u["device_ip"]] if u.get("device_ip") else None,
                 wireless_clients=wifi or None,
                 fdb=fdb or None,
                 hosts=hosts or None,
+                neighbors=neighbors,
             )
         )
     return devices
@@ -146,19 +166,24 @@ def collect(cfg: Config) -> list[Device]:
     try:
         units = c.read("/admin/device", "device_list").get("device_list") or []
         c.keep("device_list", units)
-        clients = (
-            c.read("/admin/client", "client_list", {"device_mac": "default"}).get("client_list")
-            or []
-        )
-        c.keep("client_list", clients)
+        if not units:
+            raise PluginError("signed in, but the unit listed no mesh units")
+        # Each unit's clients ("default" lists them all without saying where).
+        by_unit: dict[str, list[dict[str, Any]]] = {}
+        for u in units:
+            m = mac(u.get("mac"))
+            if not m:
+                continue
+            answer = c.read("/admin/client", "client_list", {"device_mac": u["mac"]})
+            by_unit[m] = answer.get("client_list") or []
+            c.keep(f"client_list_{m.replace(':', '')}", by_unit[m])
         try:
             perf = c.read("/admin/network", "performance")
             c.keep("performance", perf)
         except PluginError:
             perf = {}  # optional on some firmware
-        if not units:
-            raise PluginError("signed in, but the unit listed no mesh units")
-        return build(units, clients, perf)
+        host = c.base.split("://", 1)[-1].split("/")[0].split(":")[0]
+        return build(units, by_unit, perf, host)
     finally:
         c.close()
 

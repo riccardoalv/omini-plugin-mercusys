@@ -42,6 +42,8 @@ class FakeHalo:
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         form = request.url.params.get("form")
+        if request.headers.get("content-type") != "application/json":
+            return httpx.Response(200, json={"error_code": 1, "msg": "no such callback"})
         path = request.url.raw_path.decode().split("?")[0]
         self.calls.append(form)
         if form == "keys":
@@ -73,8 +75,7 @@ class FakeHalo:
         headers = {}
         if form == "login":
             self.logins += 1
-            assert "params" not in payload, "the password goes at the top level"
-            pw = rsa_decrypt(self.pw_key, payload["password"]).decode()
+            pw = rsa_decrypt(self.pw_key, payload["params"]["password"]).decode()
             if pw != self.password:
                 return answer({"error_code": -5002, "result": {"attemptsAllowed": 9}})
             self.stok = f"stok{self.logins}"
@@ -86,6 +87,9 @@ class FakeHalo:
         ):
             return httpx.Response(403)
         assert payload["operation"] == "read", "only reads are sent"
+        if form == "client_list":
+            unit = payload["params"]["device_mac"].replace("-", "").replace(":", "").lower()
+            return answer({"error_code": 0, "result": self.answers[f"client_list_{unit}"]})
         return answer({"error_code": 0, "result": self.answers[form]})
 
 

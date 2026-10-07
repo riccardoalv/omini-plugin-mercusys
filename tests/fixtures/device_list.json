@@ -1,4 +1,71 @@
-{"device_list": [
- {"mac": "AA-BB-CC-00-00-01", "device_ip": "192.168.1.121", "role": "master", "nickname": "living_room", "custom_nickname": null, "device_model": "Halo H60XS", "hardware_ver": "1.0", "software_ver": "1.2.0 Build 20260119", "inet_status": "online", "group_status": "connected", "connection_type": ["wired"]},
- {"mac": "AA-BB-CC-00-00-02", "device_ip": "192.168.1.81", "role": "slave", "nickname": "office", "custom_nickname": "RXNjcml0w7NyaW8=", "device_model": "Halo H60XR", "hardware_ver": "1.0", "software_ver": "1.2.0 Build 20260119", "inet_status": "online", "group_status": "connected", "connection_type": ["band5"]}
-]}
+{
+ "device_list": [
+  {
+   "nand_flash": true,
+   "hardware_ver": "1.0",
+   "bssid_sta_2g": "",
+   "software_ver": "1.2.0 Build 20260212 Rel. 66759",
+   "role": "master",
+   "bssid_sta_5g": "",
+   "previous": "30-16-9D-91-DE-7F",
+   "inet_status": "online",
+   "nickname": "living_room",
+   "oversized_firmware": false,
+   "bssid_5g": "",
+   "set_gateway_support": true,
+   "inet_error_msg": "well",
+   "group_status": "connected",
+   "mac": "30-16-9D-91-DE-7F",
+   "bssid_2g": "",
+   "support_plc": false,
+   "oem_id": "F88E05EA61FC3E5B789E7801D7E45D0B",
+   "signal_level": {
+    "band5": "0",
+    "band2_4": "0"
+   },
+   "product_level": 200,
+   "device_ip": "192.168.1.81",
+   "device_model": "H60XR",
+   "hw_id": "C7501AD6D2805B6CDB1AD3429E3388F3",
+   "device_type": "MER.MESH"
+  },
+  {
+   "nand_flash": true,
+   "device_ip": "192.168.1.121",
+   "owner_transfer": true,
+   "software_ver": "1.2.0 Build 20260119 Rel. 51031",
+   "previous": "30-16-9D-91-DE-7F",
+   "parent_device_id": "A15AD35F34811633B5D4EC5879894D87A7167215",
+   "bssid_sta_2g": "30:16:9D:F8:0E:7E",
+   "bssid_2g": "30:16:9D:E4:76:75",
+   "role": "slave",
+   "bssid_sta_5g": "30:16:9D:15:52:C7",
+   "device_id": "007F0BAA197C080E63EF372AE299E485582E90A3",
+   "product_level": 200,
+   "nickname": "bedroom",
+   "oem_id": "FC876F1EE02D91A87B819C79A23AE607",
+   "inet_status": "online",
+   "mac": "30-16-9D-A6-B3-24",
+   "hardware_ver": "1.0",
+   "group_status": "connected",
+   "set_gateway_support": false,
+   "inet_error_msg": "well",
+   "connection_type": [
+    "wired"
+   ],
+   "support_plc": false,
+   "eth_bkhl_ports": {},
+   "bssid_5g": "30:16:9D:AA:72:F7",
+   "port_count": 2,
+   "signal_level": {
+    "band2_4": "3",
+    "band5": "3"
+   },
+   "device_model": "H60XS",
+   "oversized_firmware": false,
+   "speed_get_support": true,
+   "hw_id": "863BDB756F9587FBE29F5A3DF691B339",
+   "device_type": "MER.MESH"
+  }
+ ]
+}

@@ -1,0 +1,58 @@
+{
+ "client_list": [
+  {
+   "mac": "E8-F9-D4-F5-22-7E",
+   "up_speed": 0,
+   "down_speed": 0,
+   "wire_type": "wireless",
+   "access_host": "1",
+   "connection_type": "band2_4",
+   "space_id": "6",
+   "ip": "192.168.1.166",
+   "client_mesh": true,
+   "online": true,
+   "name": "Q2xpZW50IGFjYTY=",
+   "enable_priority": false,
+   "remain_time": 0,
+   "owner_id": "",
+   "client_type": "iot_device",
+   "interface": "main"
+  },
+  {
+   "mac": "92-34-C8-0F-F4-7D",
+   "up_speed": 0,
+   "down_speed": 0,
+   "wire_type": "wireless",
+   "access_host": "1",
+   "connection_type": "band2_4",
+   "space_id": "6",
+   "ip": "192.168.1.41",
+   "client_mesh": true,
+   "online": true,
+   "name": "Q2xpZW50IDI3NjQ=",
+   "enable_priority": false,
+   "remain_time": 0,
+   "owner_id": "",
+   "client_type": "phone",
+   "interface": "main"
+  },
+  {
+   "mac": "F8-2A-53-FC-B3-04",
+   "up_speed": 0,
+   "down_speed": 0,
+   "wire_type": "wireless",
+   "access_host": "1",
+   "connection_type": "band2_4",
+   "space_id": "6",
+   "ip": "192.168.1.102",
+   "client_mesh": true,
+   "online": true,
+   "name": "Q2xpZW50IDkxMDI=",
+   "enable_priority": false,
+   "remain_time": 0,
+   "owner_id": "",
+   "client_type": "iot_device",
+   "interface": "guest"
+  }
+ ]
+}

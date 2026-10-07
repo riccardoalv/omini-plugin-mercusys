@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from pathlib import Path
 from typing import Any
 
@@ -19,7 +20,9 @@ from omini_sdk import PluginError, log
 
 from omini_mercusys.crypto import Session, rsa_encrypt
 
-FORM = {"Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"}
+# As the web interface sends every request (even the urlencoded sign=&data=
+# body): the unit picks how to read a request by this header.
+JSON = {"Content-Type": "application/json"}
 
 
 class SessionExpired(Exception):
@@ -104,7 +107,7 @@ class Client:
 
     def _post(self, path: str, form: str, body: str) -> dict[str, Any]:
         try:
-            r = self.http.post(path, params={"form": form}, content=body, headers=FORM)
+            r = self.http.post(path, params={"form": form}, content=body, headers=JSON)
         except httpx.ConnectError as e:
             raise PluginError(f"cannot connect to {self.base}: {e}") from e
         except httpx.TimeoutException as e:
@@ -120,18 +123,66 @@ class Client:
         except ValueError as e:
             raise PluginError(f"unexpected answer from {path}") from e
 
+    # After a refused login, wait before trying again: the unit counts failed
+    # attempts and locks the login for a while past a limit.
+    LOGIN_BACKOFF_S = 15 * 60
+
+    def _refused_recently(self) -> str | None:
+        last = self._load().get("refused")
+        same = last and last.get("for") == _fingerprint(
+            self.session.username, self.session.password
+        )
+        if same and time.time() - last.get("at", 0) < self.LOGIN_BACKOFF_S:
+            return last.get("error")
+        return None
+
+    def _remember_refusal(self, error: str | None) -> None:
+        f = self._state_file()
+        if not f:
+            return
+        data = self._load()
+        if error:
+            # Only for these credentials: new ones are tried at once.
+            data["refused"] = {
+                "at": time.time(),
+                "error": error,
+                "for": _fingerprint(self.session.username, self.session.password),
+            }
+        else:
+            data.pop("refused", None)
+        try:
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_text(json.dumps(data))
+            os.chmod(f, 0o600)
+        except OSError:
+            pass
+
     def login(self) -> None:
+        recent = self._refused_recently()
+        if recent:
+            raise PluginError(f"{recent} (waiting a few minutes before signing in again)")
+        try:
+            self._login()
+        except PluginError as e:
+            if "connect" not in str(e) and "answer" not in str(e):
+                self._remember_refusal(str(e))
+            raise
+        self._remember_refusal(None)
+
+    def _login(self) -> None:
         s = self.session
-        keys = self._post("/cgi-bin/luci/;stok=/login", "keys", "operation=read")
-        auth = self._post("/cgi-bin/luci/;stok=/login", "auth", "operation=read")
+        keys = self._post("/cgi-bin/luci/;stok=/login", "keys", '{"operation":"read"}')
+        auth = self._post("/cgi-bin/luci/;stok=/login", "auth", '{"operation":"read"}')
         try:
             n, e = (int(x, 16) for x in keys["result"]["password"])
             s.sign_n, s.sign_e = (int(x, 16) for x in auth["result"]["key"])
             s.seq = int(auth["result"]["seq"])
         except (KeyError, TypeError, ValueError) as err:
             raise PluginError("this does not look like a Mercusys Halo or Deco unit") from err
-        # As the unit's own login page sends it (TP-Link Deco nests it in "params").
-        payload = {"password": rsa_encrypt(n, e, s.password.encode()), "operation": "login"}
+        payload = {
+            "params": {"password": rsa_encrypt(n, e, s.password.encode())},
+            "operation": "login",
+        }
         self.http.cookies.clear()
         try:
             answer = self._post(
@@ -142,6 +193,11 @@ class Client:
                 "the unit refused the login: another device may be signed in as admin"
             ) from err
         data = s.decode(answer.get("data"))
+        self.keep(
+            "login",
+            {k: v for k, v in data.items() if k != "result"}
+            | {"result": {k: v for k, v in (data.get("result") or {}).items() if k != "stok"}},
+        )
         code = data.get("error_code")
         if code == -5002:
             left = (data.get("result") or {}).get("attemptsAllowed", "?")
