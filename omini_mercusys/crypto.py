@@ -3,8 +3,9 @@
 - The password is encrypted with the unit's RSA key (PKCS#1 v1.5, split in
   blocks, hex-joined).
 - Every request after that is AES-128-CBC encrypted with a key and IV the
-  client picks (16-digit numbers), and signed: an RSA-encrypted
-  ``k=<key>&i=<iv>&h=<md5(user+password)>&s=<seq + data length>``.
+  client picks (16-digit numbers), and signed with the unit's other RSA key:
+  ``h=<md5(user+password)>&s=<seq + data length>``, plus ``k=<key>&i=<iv>``
+  in front on the login, which is how the unit learns the AES key.
 """
 
 from __future__ import annotations
@@ -82,13 +83,16 @@ class Session:
             "cookie": self.cookie,
         }
 
-    def encode(self, payload: dict[str, Any]) -> str:
-        """The body of a signed, encrypted request."""
+    def encode(self, payload: dict[str, Any], login: bool = False) -> str:
+        """The body of a signed, encrypted request. The login's signature also
+        carries the AES key and IV; later requests sign the hash and length."""
         data = base64.b64encode(
             aes_encrypt(self.key, self.iv, json.dumps(payload, separators=(",", ":")).encode())
         ).decode()
         auth = hashlib.md5(f"{self.username}{self.password}".encode()).hexdigest()
-        text = f"k={self.key}&i={self.iv}&h={auth}&s={self.seq + len(data)}"
+        text = f"h={auth}&s={self.seq + len(data)}"
+        if login:
+            text = f"k={self.key}&i={self.iv}&{text}"
         sign = rsa_encrypt(self.sign_n, self.sign_e, text.encode())
         return f"sign={sign}&data={quote_plus(data)}"
 

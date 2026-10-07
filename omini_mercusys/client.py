@@ -130,13 +130,13 @@ class Client:
             s.seq = int(auth["result"]["seq"])
         except (KeyError, TypeError, ValueError) as err:
             raise PluginError("this does not look like a Mercusys Halo or Deco unit") from err
-        payload = {
-            "params": {"password": rsa_encrypt(n, e, s.password.encode())},
-            "operation": "login",
-        }
+        # As the unit's own login page sends it (TP-Link Deco nests it in "params").
+        payload = {"password": rsa_encrypt(n, e, s.password.encode()), "operation": "login"}
         self.http.cookies.clear()
         try:
-            answer = self._post("/cgi-bin/luci/;stok=/login", "login", s.encode(payload))
+            answer = self._post(
+                "/cgi-bin/luci/;stok=/login", "login", s.encode(payload, login=True)
+            )
         except SessionExpired as err:
             raise PluginError(
                 "the unit refused the login: another device may be signed in as admin"

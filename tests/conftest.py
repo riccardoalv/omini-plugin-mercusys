@@ -33,6 +33,7 @@ class FakeHalo:
         self.answers = fixtures
         self.calls = []
         self.logins = 0
+        self.aes = ("", "")
 
     @staticmethod
     def pub(key):
@@ -55,7 +56,13 @@ class FakeHalo:
         body = parse_qs(request.content.decode())
         sign = rsa_decrypt(self.sign_key, body["sign"][0]).decode()
         fields = dict(x.split("=", 1) for x in sign.split("&"))
-        key, iv = fields["k"], fields["i"]
+        # Only the login carries the AES key; later requests reuse it.
+        if form == "login":
+            assert "k" in fields and "i" in fields, "the login must carry the AES key"
+            self.aes = fields["k"], fields["i"]
+        else:
+            assert "k" not in fields, "only the login carries the AES key"
+        key, iv = self.aes
         assert int(fields["s"]) == self.seq + len(body["data"][0]), "bad signature length"
         payload = json.loads(aes_decrypt(key, iv, base64.b64decode(body["data"][0])))
 
@@ -66,7 +73,8 @@ class FakeHalo:
         headers = {}
         if form == "login":
             self.logins += 1
-            pw = rsa_decrypt(self.pw_key, payload["params"]["password"]).decode()
+            assert "params" not in payload, "the password goes at the top level"
+            pw = rsa_decrypt(self.pw_key, payload["password"]).decode()
             if pw != self.password:
                 return answer({"error_code": -5002, "result": {"attemptsAllowed": 9}})
             self.stok = f"stok{self.logins}"
