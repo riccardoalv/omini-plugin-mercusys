@@ -122,7 +122,7 @@ def test_waits_after_a_refused_login(halo, cfg):
     assert collect(cfg)
 
 
-def test_a_client_without_a_band_is_not_a_wifi_client(halo, cfg):
+def test_a_client_without_a_band_is_not_reported(halo, cfg):
     unit = next(k for k in halo.answers if k.startswith("client_list_"))
     first = halo.answers[unit]["client_list"][0]
     first["connection_type"] = "unknown"
@@ -131,8 +131,9 @@ def test_a_client_without_a_band_is_not_a_wifi_client(halo, cfg):
     assert all(w.band for w in wifi)
     gone = first["mac"].lower().replace("-", ":")
     assert gone not in {w.mac for w in wifi}
-    # Still named for the map.
-    assert gone in {h.mac for d in devices for h in d.hosts or []}
+    # Not reported at all: neither Wi-Fi nor cable (a name would place it
+    # under the unit).
+    assert gone not in {h.mac for d in devices for h in d.hosts or []}
 
 
 def test_client_traffic_in_bits_per_second(halo, cfg):
@@ -204,3 +205,15 @@ def test_a_read_that_times_out_is_tried_again(halo, cfg):
 
     halo.handler = handler
     assert collect(cfg)
+
+
+def test_a_client_of_unknown_connection_is_not_reported(halo, cfg):
+    unit = next(k for k in halo.answers if k.startswith("client_list_"))
+    first = halo.answers[unit]["client_list"][0]
+    first["wire_type"], first["connection_type"] = "unknown", None
+    devices = collect(cfg)
+    gone = first["mac"].lower().replace("-", ":")
+    seen = {w.mac for d in devices for w in d.wireless_clients or []}
+    seen |= {f.mac for d in devices for f in d.fdb or []}
+    seen |= {h.mac for d in devices for h in d.hosts or []}
+    assert gone not in seen

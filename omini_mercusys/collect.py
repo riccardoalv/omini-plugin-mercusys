@@ -158,7 +158,7 @@ def build(
             elif kind == "wireless" and BANDS.get(str(c.get("connection_type") or "")):
                 # Only with a known band: a Wi-Fi client always has one, so
                 # without it the unit's data is incomplete (the device is still
-                # found by the switches and ARP, with its name from here).
+                # found by the switches and ARP, if it is on the network).
                 band = BANDS.get(str(c.get("connection_type") or ""))
                 net = str(c.get("interface") or "main")
                 ssid = (ssids or {}).get((band or "", net))
@@ -175,6 +175,10 @@ def build(
                 wifi.append(
                     WirelessClient(mac=cm, interface=label or None, ssid=ssid, band=band, **traffic)
                 )
+            else:
+                # Neither Wi-Fi with a band nor cable: not attached to this unit
+                # right now (the unit lists it as "unknown"); not reported.
+                continue
             name = text(c.get("name"))
             if Host is not None and c.get("ip") and name:
                 hosts.append(Host(ip=c["ip"], mac=cm, hostnames=[name], sources=["mercusys"]))
