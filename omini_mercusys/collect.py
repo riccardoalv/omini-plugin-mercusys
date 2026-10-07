@@ -65,12 +65,16 @@ def pct(value: Any) -> float | None:
     return round(v * 100 if v <= 1 else v, 1)
 
 
-def rate_mbps(value: Any) -> float | None:
-    """Client rates come in bytes per second."""
+def bps(value: Any) -> int | None:
+    """Client traffic comes in bytes per second."""
     try:
-        return round(float(value) * 8 / 1e6, 2)
+        return round(float(value) * 8)
     except (TypeError, ValueError):
         return None
+
+
+# Current traffic per client (rx_bps/tx_bps) is in the SDK of Omini 0.4 and later.
+TRAFFIC = "rx_bps" in WirelessClient.model_fields
 
 
 def unit_name(d: dict[str, Any]) -> str | None:
@@ -111,15 +115,13 @@ def build(
                 label = BAND_NAMES.get(band or "", "")  # nothing when the band is unknown
                 if c.get("interface") and c["interface"] != "main":
                     label = f"{label} ({c['interface']})".strip()
-                wifi.append(
-                    WirelessClient(
-                        mac=cm,
-                        interface=label or None,
-                        band=band,
-                        tx_rate_mbps=rate_mbps(c.get("down_speed")),
-                        rx_rate_mbps=rate_mbps(c.get("up_speed")),
-                    )
+                # The unit reports each client's traffic, not its link rate.
+                traffic = (
+                    {"rx_bps": bps(c.get("down_speed")), "tx_bps": bps(c.get("up_speed"))}
+                    if TRAFFIC
+                    else {}
                 )
+                wifi.append(WirelessClient(mac=cm, interface=label or None, band=band, **traffic))
             name = text(c.get("name"))
             if Host is not None and c.get("ip") and name:
                 hosts.append(Host(ip=c["ip"], mac=cm, hostnames=[name], sources=["mercusys"]))

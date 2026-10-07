@@ -32,6 +32,8 @@ def test_clients_on_the_unit_they_use(halo, cfg):
     labels = {w.interface for w in main.wireless_clients + sat.wireless_clients}
     assert "2.4 GHz (guest)" in labels  # the guest network is told apart
     assert all(":" in w.mac for w in sat.wireless_clients)
+    # Traffic (bytes/s from the unit → bits/s); no link rate, the unit has none.
+    assert all(w.rx_bps is not None and w.tx_rate_mbps is None for w in sat.wireless_clients)
     # The names given in the app, for the map.
     assert all(h.hostnames and h.sources == ["mercusys"] for h in sat.hosts)
 
@@ -118,3 +120,12 @@ def test_unknown_band_has_no_label(halo, cfg):
     clients = [w for d in devices for w in d.wireless_clients or []]
     assert all(w.interface != "unknown" for w in clients)
     assert any(w.band is None and w.interface is None for w in clients)
+
+
+def test_client_traffic_in_bits_per_second(halo, cfg):
+    unit = next(k for k in halo.answers if k.startswith("client_list_"))
+    first = halo.answers[unit]["client_list"][0]
+    first["down_speed"], first["up_speed"] = 250_000, 12_500
+    devices = collect(cfg)
+    w = next(w for d in devices for w in d.wireless_clients or [] if w.rx_bps == 2_000_000)
+    assert w.tx_bps == 100_000
