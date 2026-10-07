@@ -122,13 +122,17 @@ def test_waits_after_a_refused_login(halo, cfg):
     assert collect(cfg)
 
 
-def test_unknown_band_has_no_label(halo, cfg):
+def test_a_client_without_a_band_is_not_a_wifi_client(halo, cfg):
     unit = next(k for k in halo.answers if k.startswith("client_list_"))
-    halo.answers[unit]["client_list"][0]["connection_type"] = "unknown"
+    first = halo.answers[unit]["client_list"][0]
+    first["connection_type"] = "unknown"
     devices = collect(cfg)
-    clients = [w for d in devices for w in d.wireless_clients or []]
-    assert all(w.interface != "unknown" for w in clients)
-    assert any(w.band is None and w.interface is None for w in clients)
+    wifi = [w for d in devices for w in d.wireless_clients or []]
+    assert all(w.band for w in wifi)
+    gone = first["mac"].lower().replace("-", ":")
+    assert gone not in {w.mac for w in wifi}
+    # Still named for the map.
+    assert gone in {h.mac for d in devices for h in d.hosts or []}
 
 
 def test_client_traffic_in_bits_per_second(halo, cfg):

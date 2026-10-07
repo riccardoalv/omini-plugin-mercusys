@@ -127,7 +127,10 @@ def build(
             kind = str(c.get("wire_type", "")).lower()
             if kind == "wired":
                 fdb.append(FdbEntry(mac=cm, port="LAN"))
-            elif kind == "wireless":
+            elif kind == "wireless" and BANDS.get(str(c.get("connection_type") or "")):
+                # Only with a known band: a Wi-Fi client always has one, so
+                # without it the unit's data is incomplete (the device is still
+                # found by the switches and ARP, with its name from here).
                 band = BANDS.get(str(c.get("connection_type") or ""))
                 net = str(c.get("interface") or "main")
                 ssid = (ssids or {}).get((band or "", net))
