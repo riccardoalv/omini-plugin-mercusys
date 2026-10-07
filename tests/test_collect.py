@@ -30,7 +30,7 @@ def test_clients_on_the_unit_they_use(halo, cfg):
     assert len(main.wireless_clients) == 3 and len(sat.wireless_clients) == 6
     assert {w.band for w in sat.wireless_clients} == {"2.4ghz", "5ghz"}
     labels = {w.interface for w in main.wireless_clients + sat.wireless_clients}
-    assert "2.4 GHz (guest)" in labels  # the guest network is told apart
+    assert "Casa-Visitantes · 2.4 GHz" in labels  # the guest network by its name
     assert all(":" in w.mac for w in sat.wireless_clients)
     # Traffic (bytes/s from the unit → bits/s); no link rate, the unit has none.
     assert all(w.rx_bps is not None and w.tx_rate_mbps is None for w in sat.wireless_clients)
@@ -74,7 +74,15 @@ def test_wrong_password(halo, cfg):
 
 def test_only_reads(halo, cfg):
     collect(cfg)
-    assert set(halo.calls) <= {"keys", "auth", "login", "device_list", "client_list", "performance"}
+    assert set(halo.calls) <= {
+        "keys",
+        "auth",
+        "login",
+        "device_list",
+        "client_list",
+        "wlan",
+        "performance",
+    }
     assert halo.calls.count("client_list") == 2  # one per unit
 
 
@@ -91,6 +99,7 @@ def test_keeps_the_last_answers(halo, cfg):
         "device_list.json",
         "login.json",
         "performance.json",
+        "wlan_names.json",
     ]
     assert "stok" not in (cfg.state_dir / "pages" / "login.json").read_text()
 
@@ -129,3 +138,24 @@ def test_client_traffic_in_bits_per_second(halo, cfg):
     devices = collect(cfg)
     w = next(w for d in devices for w in d.wireless_clients or [] if w.rx_bps == 2_000_000)
     assert w.tx_bps == 100_000
+
+
+def test_wifi_network_names_never_passwords(halo, cfg):
+    devices = collect(cfg)
+    clients = [w for d in devices for w in d.wireless_clients or []]
+    labels = {w.interface for w in clients}
+    # "Casa · 5 GHz", and the guest network by its own name.
+    assert "Casa · 5 GHz" in labels and "Casa-Visitantes · 2.4 GHz" in labels
+    assert {w.ssid for w in clients} <= {"Casa", "Casa-Visitantes"}
+    # The answer carries the Wi-Fi passwords: none is ever written.
+    for f in cfg.state_dir.rglob("*"):
+        if f.is_file():
+            body = f.read_text()
+            assert "segredo" not in body and "c2VncmVkbw" not in body, f
+
+
+def test_without_network_names_the_band_is_enough(halo, cfg):
+    del halo.answers["wlan"]
+    devices = collect(cfg)
+    labels = {w.interface for d in devices for w in d.wireless_clients or []}
+    assert labels <= {"2.4 GHz", "5 GHz", "guest", None}

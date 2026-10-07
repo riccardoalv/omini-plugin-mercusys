@@ -9,6 +9,7 @@
 | Every unit of the mesh: name, model, firmware, IP, MAC | One access point per unit on the map |
 | Clients of each unit: Wi-Fi band and rates, or wired | Each phone, laptop or TV under the unit it uses |
 | Client names given in the Mercusys app | Names on the map |
+| Wi-Fi network names (main and guest) | Which network each client uses ("Home · 5 GHz"); the passwords in the same answer are never kept |
 | CPU and memory of the main unit | Device panel |
 
 **Read-only:** besides signing in, the plugin only sends `read` operations. It never changes a setting, reboots or blocks a client.

@@ -90,6 +90,8 @@ class FakeHalo:
         if form == "client_list":
             unit = payload["params"]["device_mac"].replace("-", "").replace(":", "").lower()
             return answer({"error_code": 0, "result": self.answers[f"client_list_{unit}"]})
+        if form not in self.answers:
+            return answer({"error_code": -1, "msg": "no such callback"})
         return answer({"error_code": 0, "result": self.answers[form]})
 
 

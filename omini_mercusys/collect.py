@@ -77,6 +77,22 @@ def bps(value: Any) -> int | None:
 TRAFFIC = "rx_bps" in WirelessClient.model_fields
 
 
+def networks(wlan: dict[str, Any]) -> dict[tuple[str, str], str]:
+    """Wi-Fi network names by (band, network): ("2.4ghz", "main") → "Home".
+    Only the names are read from this answer: it also carries the Wi-Fi
+    passwords, which are never kept."""
+    out = {}
+    for key, nets in (wlan or {}).items():
+        band = BANDS.get(key)
+        if not band or not isinstance(nets, dict):
+            continue
+        for net, client_iface in (("host", "main"), ("guest", "guest")):
+            ssid = text((nets.get(net) or {}).get("ssid"))
+            if ssid and (band, client_iface) not in out:
+                out[(band, client_iface)] = ssid
+    return out
+
+
 def unit_name(d: dict[str, Any]) -> str | None:
     return (
         text(d.get("custom_nickname"))
@@ -90,6 +106,7 @@ def build(
     clients_by_unit: dict[str, list[dict[str, Any]]],
     perf: dict[str, Any],
     host: str,
+    ssids: dict[tuple[str, str], str] | None = None,
 ) -> list[Device]:
     """``clients_by_unit``: each unit's clients (by its MAC); ``perf`` is the
     CPU and memory of the unit Omini talks to (``host``)."""
@@ -112,16 +129,21 @@ def build(
                 fdb.append(FdbEntry(mac=cm, port="LAN"))
             elif kind == "wireless":
                 band = BANDS.get(str(c.get("connection_type") or ""))
-                label = BAND_NAMES.get(band or "", "")  # nothing when the band is unknown
-                if c.get("interface") and c["interface"] != "main":
-                    label = f"{label} ({c['interface']})".strip()
+                net = str(c.get("interface") or "main")
+                ssid = (ssids or {}).get((band or "", net))
+                # "Home · 5 GHz", "Home-Guest · 2.4 GHz"; the band alone without a name.
+                label = " · ".join(x for x in (ssid, BAND_NAMES.get(band or "", "")) if x) or (
+                    net if net != "main" else ""
+                )
                 # The unit reports each client's traffic, not its link rate.
                 traffic = (
                     {"rx_bps": bps(c.get("down_speed")), "tx_bps": bps(c.get("up_speed"))}
                     if TRAFFIC
                     else {}
                 )
-                wifi.append(WirelessClient(mac=cm, interface=label or None, band=band, **traffic))
+                wifi.append(
+                    WirelessClient(mac=cm, interface=label or None, ssid=ssid, band=band, **traffic)
+                )
             name = text(c.get("name"))
             if Host is not None and c.get("ip") and name:
                 hosts.append(Host(ip=c["ip"], mac=cm, hostnames=[name], sources=["mercusys"]))
@@ -180,12 +202,17 @@ def collect(cfg: Config) -> list[Device]:
             by_unit[m] = answer.get("client_list") or []
             c.keep(f"client_list_{m.replace(':', '')}", by_unit[m])
         try:
+            ssids = networks(c.read("/admin/wireless", "wlan"))
+            c.keep("wlan_names", {f"{b} {n}": s for (b, n), s in ssids.items()})
+        except PluginError:
+            ssids = {}  # names are a nicety
+        try:
             perf = c.read("/admin/network", "performance")
             c.keep("performance", perf)
         except PluginError:
             perf = {}  # optional on some firmware
         host = c.base.split("://", 1)[-1].split("/")[0].split(":")[0]
-        return build(units, by_unit, perf, host)
+        return build(units, by_unit, perf, host, ssids)
     finally:
         c.close()
 

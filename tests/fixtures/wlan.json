@@ -1,0 +1,4 @@
+{"band2_4": {"host": {"ssid": "Q2FzYQ==", "password": "c2VncmVkbw==", "enable": true, "channel": 6},
+             "guest": {"ssid": "Q2FzYS1WaXNpdGFudGVz", "password": "dmlzaXRhcw==", "enable": true}},
+ "band5_1": {"host": {"ssid": "Q2FzYQ==", "password": "c2VncmVkbw==", "enable": true, "channel": 36},
+             "guest": {"ssid": "Q2FzYS1WaXNpdGFudGVz", "password": "dmlzaXRhcw==", "enable": false}}}
