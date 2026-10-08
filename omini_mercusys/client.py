@@ -24,6 +24,9 @@ from omini_mercusys.crypto import Session, rsa_encrypt
 # body): the unit picks how to read a request by this header.
 JSON = {"Content-Type": "application/json"}
 
+# Pause before asking a slow unit again.
+RETRY_PAUSE_S = 2.0
+
 
 class SessionExpired(Exception):
     pass
@@ -37,7 +40,7 @@ class Client:
         password: str,
         verify_tls: bool = False,
         state_dir: Path | None = None,
-        timeout: float = 15,
+        timeout: float = 30,
         transport: httpx.BaseTransport | None = None,
     ):
         host = host.strip().rstrip("/")
@@ -106,8 +109,9 @@ class Client:
     # --- HTTP -------------------------------------------------------------------
 
     def _post(self, path: str, form: str, body: str) -> dict[str, Any]:
-        # A unit busy for a moment: reads are tried once more (never the login).
-        tries = 1 if form == "login" else 2
+        # A unit busy for a moment: reads are tried twice more, after a short
+        # pause (never the login).
+        tries = 1 if form == "login" else 3
         for attempt in range(tries):
             try:
                 r = self.http.post(path, params={"form": form}, content=body, headers=JSON)
@@ -117,6 +121,7 @@ class Client:
             except httpx.TimeoutException as e:
                 if attempt + 1 < tries:
                     log.info("%s did not answer %s in time, trying again", self.base, form)
+                    time.sleep(RETRY_PAUSE_S)
                     continue
                 raise PluginError(f"{self.base} did not answer in time") from e
             except httpx.HTTPError as e:

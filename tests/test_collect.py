@@ -217,3 +217,40 @@ def test_a_client_of_unknown_connection_is_not_reported(halo, cfg):
     seen |= {f.mac for d in devices for f in d.fdb or []}
     seen |= {h.mac for d in devices for h in d.hosts or []}
     assert gone not in seen
+
+
+def test_a_slow_answer_is_asked_again(halo, cfg, monkeypatch):
+    from functools import partial
+
+    import httpx
+
+    import omini_mercusys.client as client_module
+    import omini_mercusys.collect as collect_module
+
+    monkeypatch.setattr(client_module, "RETRY_PAUSE_S", 0)
+    timeouts = {"left": 2}  # two reads in a row time out: the third try answers
+
+    def handler(request):
+        if request.url.params.get("form") != "login" and timeouts["left"]:
+            timeouts["left"] -= 1
+            raise httpx.ReadTimeout("slow", request=request)
+        return halo.handler(request)
+
+    monkeypatch.setattr(
+        collect_module,
+        "Client",
+        partial(client_module.Client, transport=httpx.MockTransport(handler)),
+    )
+    assert collect(cfg)
+    assert timeouts["left"] == 0
+
+
+def test_waits_as_long_as_asked(cfg, tmp_path):
+    from omini_sdk import Config
+
+    from omini_mercusys.collect import wait_s
+
+    assert wait_s(cfg) == 30
+    assert wait_s(Config({"timeout_s": 60}, tmp_path)) == 60
+    assert wait_s(Config({"timeout_s": 2}, tmp_path)) == 5
+    assert wait_s(Config({"timeout_s": 600}, tmp_path)) == 120

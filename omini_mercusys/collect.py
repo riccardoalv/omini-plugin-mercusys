@@ -39,7 +39,13 @@ def client_from(cfg: Config) -> Client:
         password,
         verify_tls=cfg.bool("verify_tls", False),
         state_dir=cfg.state_dir,
+        timeout=wait_s(cfg),
     )
+
+
+def wait_s(cfg: Config) -> float:
+    """How long to wait for each answer: the "timeout_s" field, 5 to 120 s."""
+    return float(min(max(cfg.int("timeout_s", 30) or 30, 5), 120))
 
 
 def mac(value: Any) -> str | None:

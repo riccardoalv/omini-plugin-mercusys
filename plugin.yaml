@@ -1,9 +1,9 @@
 id: mercusys
 name: Mercusys Halo
-version: 0.1.2
+version: 0.1.3
 protocol: 1
 entrypoint: main.py
-timeout_s: 60
+timeout_s: 240
 description: >-
   Mercusys Halo mesh systems (and TP-Link Deco units with the same local web
   interface): every unit of the mesh, its Wi-Fi and wired clients with band,
@@ -33,3 +33,9 @@ fields:
     default: false
     group: Advanced
     help: The units use a self-signed certificate.
+  - key: timeout_s
+    type: int
+    label: Wait for an answer (seconds)
+    default: 30
+    group: Advanced
+    help: How long to wait for each answer of a unit (5 to 120). The units are slow now and then; raise it if the integration says the unit did not answer in time.
