@@ -110,13 +110,18 @@ class Client:
 
     def _post(self, path: str, form: str, body: str) -> dict[str, Any]:
         # A unit busy for a moment: reads are tried twice more, after a short
-        # pause (never the login).
+        # pause (never the login). A refused connection is tried again even for
+        # the login: nothing reached the unit, so it counts no failed attempt.
         tries = 1 if form == "login" else 3
-        for attempt in range(tries):
+        for attempt in range(3):
             try:
                 r = self.http.post(path, params={"form": form}, content=body, headers=JSON)
                 break
             except httpx.ConnectError as e:
+                if attempt + 1 < 3:
+                    log.info("%s refused the connection, trying again", self.base)
+                    time.sleep(RETRY_PAUSE_S)
+                    continue
                 raise PluginError(f"cannot connect to {self.base}: {e}") from e
             except httpx.TimeoutException as e:
                 if attempt + 1 < tries:

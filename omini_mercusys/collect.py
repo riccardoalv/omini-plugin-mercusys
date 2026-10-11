@@ -44,8 +44,8 @@ def client_from(cfg: Config) -> Client:
 
 
 def wait_s(cfg: Config) -> float:
-    """How long to wait for each answer: the "timeout_s" field, 5 to 120 s."""
-    return float(min(max(cfg.int("timeout_s", 30) or 30, 5), 120))
+    """How long to wait for each connection and answer: the "timeout_s" field, 5 to 120 s."""
+    return float(min(max(cfg.int("timeout_s", 60) or 60, 5), 120))
 
 
 def mac(value: Any) -> str | None:

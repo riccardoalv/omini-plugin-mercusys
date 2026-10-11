@@ -245,12 +245,61 @@ def test_a_slow_answer_is_asked_again(halo, cfg, monkeypatch):
     assert timeouts["left"] == 0
 
 
+def test_a_refused_connection_is_tried_again(halo, cfg, monkeypatch):
+    from functools import partial
+
+    import httpx
+
+    import omini_mercusys.client as client_module
+    import omini_mercusys.collect as collect_module
+
+    monkeypatch.setattr(client_module, "RETRY_PAUSE_S", 0)
+    refused = {"login": 1, "read": 1}  # the login and one read are refused once each
+
+    def handler(request):
+        kind = "login" if request.url.params.get("form") == "login" else "read"
+        if refused[kind]:
+            refused[kind] -= 1
+            raise httpx.ConnectError("Connection refused", request=request)
+        return halo.handler(request)
+
+    monkeypatch.setattr(
+        collect_module,
+        "Client",
+        partial(client_module.Client, transport=httpx.MockTransport(handler)),
+    )
+    assert collect(cfg)
+    assert refused == {"login": 0, "read": 0}
+
+
+def test_a_unit_that_keeps_refusing_fails(cfg, monkeypatch):
+    from functools import partial
+
+    import httpx
+
+    import omini_mercusys.client as client_module
+    import omini_mercusys.collect as collect_module
+
+    monkeypatch.setattr(client_module, "RETRY_PAUSE_S", 0)
+
+    def handler(request):
+        raise httpx.ConnectError("Connection refused", request=request)
+
+    monkeypatch.setattr(
+        collect_module,
+        "Client",
+        partial(client_module.Client, transport=httpx.MockTransport(handler)),
+    )
+    with pytest.raises(PluginError, match="cannot connect"):
+        collect(cfg)
+
+
 def test_waits_as_long_as_asked(cfg, tmp_path):
     from omini_sdk import Config
 
     from omini_mercusys.collect import wait_s
 
-    assert wait_s(cfg) == 30
-    assert wait_s(Config({"timeout_s": 60}, tmp_path)) == 60
+    assert wait_s(cfg) == 60  # the default
+    assert wait_s(Config({"timeout_s": 90}, tmp_path)) == 90
     assert wait_s(Config({"timeout_s": 2}, tmp_path)) == 5
     assert wait_s(Config({"timeout_s": 600}, tmp_path)) == 120
