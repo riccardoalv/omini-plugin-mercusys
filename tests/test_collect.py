@@ -207,6 +207,33 @@ def test_a_read_that_times_out_is_tried_again(halo, cfg):
     assert collect(cfg)
 
 
+def test_an_answer_cut_short_is_asked_again(halo, cfg, monkeypatch):
+    import httpx
+
+    import omini_mercusys.client as client_module
+
+    monkeypatch.setattr(client_module, "RETRY_PAUSE_S", 0)
+
+    real = halo.handler
+    cut = {"left": 2}
+
+    def handler(request):
+        if request.url.params.get("form") == "device_list" and cut["left"]:
+            cut["left"] -= 1
+            raise httpx.RemoteProtocolError(
+                "peer closed connection without sending complete message body", request=request
+            )
+        return real(request)
+
+    halo.handler = handler
+    assert collect(cfg)
+    assert cut["left"] == 0
+
+    cut["left"] = 3  # three times in a row: the round fails, with the reason
+    with pytest.raises(PluginError, match="complete message body"):
+        collect(cfg)
+
+
 def test_a_client_of_unknown_connection_is_not_reported(halo, cfg):
     unit = next(k for k in halo.answers if k.startswith("client_list_"))
     first = halo.answers[unit]["client_list"][0]

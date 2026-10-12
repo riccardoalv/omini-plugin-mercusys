@@ -129,6 +129,14 @@ class Client:
                     time.sleep(RETRY_PAUSE_S)
                     continue
                 raise PluginError(f"{self.base} did not answer in time") from e
+            except (httpx.RemoteProtocolError, httpx.ReadError) as e:
+                # The unit closed the connection mid-answer (an incomplete
+                # chunked body): a read is asked again, as for a slow answer.
+                if attempt + 1 < tries:
+                    log.info("%s cut its answer to %s short, trying again", self.base, form)
+                    time.sleep(RETRY_PAUSE_S)
+                    continue
+                raise PluginError(f"request to {self.base} failed: {e}") from e
             except httpx.HTTPError as e:
                 raise PluginError(f"request to {self.base} failed: {e}") from e
         if r.status_code in (401, 403):
