@@ -32,6 +32,12 @@ except ImportError:  # pragma: no cover
     WifiNetwork = None  # type: ignore[assignment,misc]
 WIFI = WifiNetwork is not None and "wifi_networks" in Device.model_fields
 
+try:  # Device.radios and wireless_uplink came in a later SDK
+    from omini_sdk.models import Radio
+except ImportError:  # pragma: no cover
+    Radio = None  # type: ignore[assignment,misc]
+RADIOS = Radio is not None and "radios" in Device.model_fields
+
 BANDS = {
     "band2_4": "2.4ghz",
     "band5": "5ghz",
@@ -139,34 +145,91 @@ def wifi_networks(wlan: dict[str, Any]) -> list[dict[str, Any]]:
     return out
 
 
+# Radio names by the wlan answer's band key, as the units' bands are shown.
+RADIO_NAMES = {
+    "band2_4": "2.4 GHz",
+    "band5": "5 GHz",
+    "band5_1": "5 GHz",
+    "band5_2": "5 GHz-2",
+    "band6": "6 GHz",
+}
+
+
+def channel_of(value: Any) -> tuple[int | None, bool | None]:
+    """(channel, automatic) of a band's ``channel``: 0 or "auto" is automatic;
+    an unknown value says neither."""
+    if isinstance(value, bool):
+        return None, None
+    if isinstance(value, str):
+        v = value.strip().lower()
+        if v == "auto":
+            return None, True
+        if not v.isdigit():
+            return None, None
+        value = int(v)
+    if not isinstance(value, int):
+        return None, None
+    if value == 0:
+        return None, True
+    return (value, False) if 1 <= value <= 233 else (None, None)
+
+
+def radios(wlan: dict[str, Any]) -> list[dict[str, Any]]:
+    """The mesh's radios, one per band of the wlan answer, with the channel
+    it is set to (on the band, or on its main network)."""
+    out = []
+    seen: set[str] = set()
+    for key, nets in (wlan or {}).items():
+        band, name = BANDS.get(key), RADIO_NAMES.get(key)
+        if not band or not name or name in seen or not isinstance(nets, dict):
+            continue
+        seen.add(name)
+        raw = nets.get("channel", (nets.get("host") or {}).get("channel"))
+        channel, auto = channel_of(raw)
+        radio = {"name": name, "band": band, "channel": channel, "auto": auto}
+        out.append({k: v for k, v in radio.items() if v is not None})
+    return out
+
+
 NAMES_TTL_S = 3600  # network names rarely change: read them once an hour
 
 
 def network_names(
     c: Client, cfg: Config
-) -> tuple[dict[tuple[str, str], str], list[dict[str, Any]]]:
-    """The Wi-Fi network names, and the networks (SSID, on or off), kept for an
-    hour in the state folder."""
+) -> tuple[dict[tuple[str, str], str], list[dict[str, Any]], list[dict[str, Any]]]:
+    """The Wi-Fi network names, the networks (SSID, on or off) and the radios
+    (band, channel), kept for an hour in the state folder."""
     cache = cfg.state_dir / "networks.json" if cfg.state_dir else None
     try:
         if cache and cache.exists():
             saved = json.loads(cache.read_text())
             if time.time() - saved.get("at", 0) < NAMES_TTL_S:
                 names = {tuple(k.split(" ", 1)): v for k, v in saved["names"].items()}
-                return names, list(saved["wifi"])  # type: ignore[return-value]
+                return names, list(saved["wifi"]), list(saved["radios"])  # type: ignore[return-value]
     except (OSError, ValueError, KeyError, TypeError):
         pass
     try:
         wlan = c.read("/admin/wireless", "wlan")
     except PluginError:
-        return {}, []  # names are a nicety
-    names, wifi = networks(wlan), wifi_networks(wlan)
+        return {}, [], []  # names are a nicety
+    names, wifi, bands = networks(wlan), wifi_networks(wlan), radios(wlan)
     flat = {f"{b} {n}": s for (b, n), s in names.items()}
     c.keep("wlan_names", flat)
     if cache:
         with contextlib.suppress(OSError):
-            cache.write_text(json.dumps({"at": time.time(), "names": flat, "wifi": wifi}))
-    return names, wifi
+            cache.write_text(
+                json.dumps({"at": time.time(), "names": flat, "wifi": wifi, "radios": bands})
+            )
+    return names, wifi, bands
+
+
+def uplink_by_wifi(u: dict[str, Any]) -> bool | None:
+    """A satellite whose backhaul (``connection_type``) is not a cable; the
+    main unit, which does not say, is left unknown."""
+    backhaul = u.get("connection_type")
+    if not isinstance(backhaul, list) or not backhaul:
+        return None
+    return "wired" not in backhaul
 
 
 def unit_name(d: dict[str, Any]) -> str | None:
@@ -184,11 +247,17 @@ def build(
     host: str,
     ssids: dict[tuple[str, str], str] | None = None,
     wifi: list[dict[str, Any]] | None = None,
+    bands: list[dict[str, Any]] | None = None,
 ) -> list[Device]:
     """``clients_by_unit``: each unit's clients (by its MAC); ``perf`` is the
     CPU and memory of the unit Omini talks to (``host``); ``wifi``: the mesh's
-    Wi-Fi networks, on that unit alone."""
+    Wi-Fi networks, on that unit alone; ``bands``: the mesh's radios, on the
+    main unit (the unit at the address without one)."""
     devices = []
+    main = next(
+        (mac(u.get("mac")) for u in units if u.get("role") == "master" and mac(u.get("mac"))),
+        next((mac(u.get("mac")) for u in units if u.get("device_ip") == host), None),
+    )
     networks_of = (
         {"wifi_networks": [WifiNetwork.model_validate(w) for w in wifi]} if WIFI and wifi else {}
     )
@@ -251,6 +320,11 @@ def build(
                 )
             ]
         here = u.get("device_ip") == host
+        extra: dict[str, Any] = dict(networks_of) if here else {}
+        if RADIOS:
+            if m == main and bands:
+                extra["radios"] = [Radio.model_validate(r) for r in bands]
+            extra["wireless_uplink"] = uplink_by_wifi(u)
         devices.append(
             Device(
                 key=m,
@@ -271,7 +345,7 @@ def build(
                 fdb=fdb or None,
                 hosts=hosts or None,
                 neighbors=neighbors,
-                **(networks_of if here else {}),
+                **extra,
             )
         )
     return devices
@@ -304,14 +378,14 @@ def collect(cfg: Config) -> list[Device]:
         )
         if missing and main:
             by_unit[main] = by_unit.get(main, []) + missing
-        ssids, wifi = network_names(c, cfg)
+        ssids, wifi, bands = network_names(c, cfg)
         try:
             perf = c.read("/admin/network", "performance")
             c.keep("performance", perf)
         except PluginError:
             perf = {}  # optional on some firmware
         host = c.base.split("://", 1)[-1].split("/")[0].split(":")[0]
-        return build(units, by_unit, perf, host, ssids, wifi)
+        return build(units, by_unit, perf, host, ssids, wifi, bands)
     finally:
         c.close()
 

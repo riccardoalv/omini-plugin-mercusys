@@ -424,3 +424,56 @@ def test_manifest_matches_what_is_read():
     }
     # The unit reports each client's traffic, not its link rate.
     assert "rates" not in manifest.split("\nfields:", 1)[0]
+
+
+def test_the_mesh_s_radios_on_the_main_unit(halo, cfg):
+    main, sat = collect(cfg)
+    assert [r.model_dump(exclude_none=True) for r in main.radios] == [
+        {"name": "2.4 GHz", "band": "2.4ghz", "channel": 6, "auto": False},
+        {"name": "5 GHz", "band": "5ghz", "channel": 36, "auto": False},
+    ]
+    assert sat.radios is None  # the mesh's channels, reported once
+    # Kept with the network names: the next round has them too.
+    assert [r.channel for r in collect(cfg)[0].radios] == [6, 36]
+    assert halo.calls.count("wlan") == 1
+
+
+@pytest.mark.parametrize("value", [0, "0", "auto"])
+def test_an_automatic_channel(halo, cfg, value):
+    halo.answers["wlan"]["band5_1"]["host"]["channel"] = value
+    radio = collect(cfg)[0].radios[1]
+    assert (radio.name, radio.channel, radio.auto) == ("5 GHz", None, True)
+
+
+def test_a_channel_on_the_band_and_one_unknown(halo, cfg):
+    wlan = halo.answers["wlan"]
+    wlan["band2_4"]["channel"] = 11
+    wlan["band5_1"]["host"]["channel"] = "dfs?"
+    wlan["band5_2"] = {"host": {"ssid": "Q2FzYQ==", "enable": True, "channel": 149}}
+    assert [r.model_dump(exclude_none=True) for r in collect(cfg)[0].radios] == [
+        {"name": "2.4 GHz", "band": "2.4ghz", "channel": 11, "auto": False},
+        {"name": "5 GHz", "band": "5ghz"},
+        {"name": "5 GHz-2", "band": "5ghz", "channel": 149, "auto": False},
+    ]
+
+
+def test_a_satellite_on_wifi_has_a_wireless_uplink(halo, cfg):
+    main, sat = collect(cfg)
+    assert (main.wireless_uplink, sat.wireless_uplink) == (None, False)
+    halo.answers["device_list"]["device_list"][1]["connection_type"] = ["band5"]
+    assert collect(cfg)[1].wireless_uplink is True
+
+
+def test_an_older_cache_is_read_again(halo, cfg):
+    collect(cfg)
+    saved = json.loads((cfg.state_dir / "networks.json").read_text())
+    del saved["radios"]
+    (cfg.state_dir / "networks.json").write_text(json.dumps(saved))
+    assert collect(cfg)[0].radios
+    assert halo.calls.count("wlan") == 2
+
+
+def test_declares_no_change():
+    from pathlib import Path
+
+    assert "changes" not in (Path(__file__).parent.parent / "plugin.yaml").read_text()

@@ -7,7 +7,9 @@ timeout_s: 300
 description: >-
   Mercusys Halo mesh systems (and TP-Link Deco units with the same local web
   interface): every unit of the mesh, its Wi-Fi and wired clients with band,
-  names and traffic, CPU and memory of the unit at the address. Read-only.
+  names and traffic, the mesh's Wi-Fi networks and radio channels, which
+  satellites reach it over Wi-Fi, CPU and memory of the unit at the address.
+  Read-only.
 author: Omini
 homepage: https://github.com/riccardoalv/omini-plugin-mercusys
 fields:
