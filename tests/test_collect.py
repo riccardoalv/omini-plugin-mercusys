@@ -383,3 +383,21 @@ def test_wired_clients_are_on_the_units_lan_port(halo, cfg):
     assert lan.model_dump(exclude_none=True) == {"name": "LAN", "type": "ethernet"}
     # A unit without wired clients gets no port it cannot describe.
     assert all(d.interfaces is None for d in devices if not d.fdb)
+
+
+def test_manifest_matches_what_is_read():
+    from pathlib import Path
+
+    manifest = (Path(__file__).parent.parent / "plugin.yaml").read_text()
+    # Every field but the address and password is advanced.
+    fields = manifest.split("\nfields:", 1)[1].split("\n  - key: ")[1:]
+    groups = {f.split("\n", 1)[0]: "group: Advanced" in f for f in fields}
+    assert groups == {
+        "host": False,
+        "password": False,
+        "username": True,
+        "verify_tls": True,
+        "timeout_s": True,
+    }
+    # The unit reports each client's traffic, not its link rate.
+    assert "rates" not in manifest.split("\nfields:", 1)[0]

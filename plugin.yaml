@@ -7,7 +7,7 @@ timeout_s: 300
 description: >-
   Mercusys Halo mesh systems (and TP-Link Deco units with the same local web
   interface): every unit of the mesh, its Wi-Fi and wired clients with band,
-  names and rates, CPU and memory. Read-only.
+  names and traffic, CPU and memory of the unit at the address. Read-only.
 author: Omini
 homepage: https://github.com/riccardoalv/omini-plugin-mercusys
 fields:
@@ -37,4 +37,5 @@ fields:
     type: int
     label: Connection timeout (seconds)
     default: 60
+    group: Advanced
     help: How long to wait for each unit to connect and answer (5 to 120). The units are slow now and then; raise it if the integration says the unit did not answer in time.
