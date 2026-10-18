@@ -67,11 +67,13 @@ def text(value: Any) -> str | None:
 
 
 def pct(value: Any) -> float | None:
+    """CPU and memory come as fractions of 1 (0.35 is 35 %). A value out of
+    that scale is left out rather than guessed as a percentage."""
     try:
         v = float(value)
     except (TypeError, ValueError):
         return None
-    return round(v * 100 if v <= 1 else v, 1)
+    return round(v * 100, 1) if 0 <= v <= 1 else None
 
 
 def bps(value: Any) -> int | None:

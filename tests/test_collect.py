@@ -3,7 +3,7 @@ import json
 import pytest
 from omini_sdk import PluginError
 
-from omini_mercusys.collect import collect, mac, text
+from omini_mercusys.collect import collect, mac, pct, text
 from omini_mercusys.collect import test as connection_test
 
 
@@ -108,6 +108,20 @@ def test_helpers():
     assert mac("AA-BB-CC-00-00-01") == "aa:bb:cc:00:00:01" and mac("x") is None
     assert text("UGxheVN0YXRpb24=") == "PlayStation"
     assert text("plain name") == "plain name"
+
+
+def test_usage_is_a_fraction():
+    # The unit reports CPU and memory as fractions (0.35 is 35 %), so 1 is a
+    # full unit; a value out of that scale is not guessed as a percentage.
+    assert pct(0.35) == 35.0 and pct(0.01) == 1.0 and pct(1) == 100.0
+    assert pct(35) is None and pct(-0.1) is None
+    assert pct(None) is None and pct("x") is None
+
+
+def test_usage_out_of_scale_is_left_out(halo, cfg):
+    halo.answers["performance"] = {"cpu_usage": 1, "mem_usage": 40}
+    _, sat = collect(cfg)
+    assert (sat.cpu_pct, sat.mem_pct) == (100.0, None)
 
 
 def test_waits_after_a_refused_login(halo, cfg):
