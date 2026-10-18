@@ -26,6 +26,12 @@ try:  # Host (client names) is in every SDK that runs this plugin; kept optional
 except ImportError:  # pragma: no cover
     Host = None  # type: ignore[assignment,misc]
 
+try:  # Device.wifi_networks came in a later SDK: left out on an older one
+    from omini_sdk.models import WifiNetwork
+except ImportError:  # pragma: no cover
+    WifiNetwork = None  # type: ignore[assignment,misc]
+WIFI = WifiNetwork is not None and "wifi_networks" in Device.model_fields
+
 BANDS = {
     "band2_4": "2.4ghz",
     "band5": "5ghz",
@@ -112,29 +118,55 @@ def networks(wlan: dict[str, Any]) -> dict[tuple[str, str], str]:
     return out
 
 
+def wifi_networks(wlan: dict[str, Any]) -> list[dict[str, Any]]:
+    """The mesh's Wi-Fi networks, one per SSID (a name on several bands is one
+    network): {ssid, enabled}. On when it is on in a band; off when it is off
+    in every band; unknown otherwise. The answer says nothing of the security."""
+    states: dict[str, list[bool | None]] = {}
+    for key, nets in (wlan or {}).items():
+        if not BANDS.get(key) or not isinstance(nets, dict):
+            continue
+        for net in ("host", "guest"):
+            n = nets.get(net) or {}
+            ssid = text(n.get("ssid"))
+            if ssid:
+                enable = n.get("enable")
+                states.setdefault(ssid, []).append(enable if isinstance(enable, bool) else None)
+    out = []
+    for ssid, on in states.items():
+        enabled = True if True in on else False if all(v is False for v in on) else None
+        out.append({"ssid": ssid, "enabled": enabled})
+    return out
+
+
 NAMES_TTL_S = 3600  # network names rarely change: read them once an hour
 
 
-def network_names(c: Client, cfg: Config) -> dict[tuple[str, str], str]:
-    """The Wi-Fi network names, kept for an hour in the state folder."""
+def network_names(
+    c: Client, cfg: Config
+) -> tuple[dict[tuple[str, str], str], list[dict[str, Any]]]:
+    """The Wi-Fi network names, and the networks (SSID, on or off), kept for an
+    hour in the state folder."""
     cache = cfg.state_dir / "networks.json" if cfg.state_dir else None
     try:
         if cache and cache.exists():
             saved = json.loads(cache.read_text())
             if time.time() - saved.get("at", 0) < NAMES_TTL_S:
-                return {tuple(k.split(" ", 1)): v for k, v in saved["names"].items()}
-    except (OSError, ValueError, KeyError):
+                names = {tuple(k.split(" ", 1)): v for k, v in saved["names"].items()}
+                return names, list(saved["wifi"])  # type: ignore[return-value]
+    except (OSError, ValueError, KeyError, TypeError):
         pass
     try:
-        names = networks(c.read("/admin/wireless", "wlan"))
+        wlan = c.read("/admin/wireless", "wlan")
     except PluginError:
-        return {}  # names are a nicety
+        return {}, []  # names are a nicety
+    names, wifi = networks(wlan), wifi_networks(wlan)
     flat = {f"{b} {n}": s for (b, n), s in names.items()}
     c.keep("wlan_names", flat)
     if cache:
         with contextlib.suppress(OSError):
-            cache.write_text(json.dumps({"at": time.time(), "names": flat}))
-    return names
+            cache.write_text(json.dumps({"at": time.time(), "names": flat, "wifi": wifi}))
+    return names, wifi
 
 
 def unit_name(d: dict[str, Any]) -> str | None:
@@ -151,10 +183,15 @@ def build(
     perf: dict[str, Any],
     host: str,
     ssids: dict[tuple[str, str], str] | None = None,
+    wifi: list[dict[str, Any]] | None = None,
 ) -> list[Device]:
     """``clients_by_unit``: each unit's clients (by its MAC); ``perf`` is the
-    CPU and memory of the unit Omini talks to (``host``)."""
+    CPU and memory of the unit Omini talks to (``host``); ``wifi``: the mesh's
+    Wi-Fi networks, on that unit alone."""
     devices = []
+    networks_of = (
+        {"wifi_networks": [WifiNetwork.model_validate(w) for w in wifi]} if WIFI and wifi else {}
+    )
     for u in units:
         m = mac(u.get("mac"))
         if not m:
@@ -234,6 +271,7 @@ def build(
                 fdb=fdb or None,
                 hosts=hosts or None,
                 neighbors=neighbors,
+                **(networks_of if here else {}),
             )
         )
     return devices
@@ -266,14 +304,14 @@ def collect(cfg: Config) -> list[Device]:
         )
         if missing and main:
             by_unit[main] = by_unit.get(main, []) + missing
-        ssids = network_names(c, cfg)
+        ssids, wifi = network_names(c, cfg)
         try:
             perf = c.read("/admin/network", "performance")
             c.keep("performance", perf)
         except PluginError:
             perf = {}  # optional on some firmware
         host = c.base.split("://", 1)[-1].split("/")[0].split(":")[0]
-        return build(units, by_unit, perf, host, ssids)
+        return build(units, by_unit, perf, host, ssids, wifi)
     finally:
         c.close()
 

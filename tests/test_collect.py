@@ -174,6 +174,29 @@ def test_wifi_network_names_never_passwords(halo, cfg):
             assert "segredo" not in body and "c2VncmVkbw" not in body, f
 
 
+def test_the_wifi_networks_on_the_unit_at_the_address(halo, cfg):
+    main, sat = collect(cfg)
+    # One per SSID, whatever its bands; the guest network is on in 2.4 GHz.
+    assert [(w.ssid, w.enabled, w.vlan, w.security) for w in sat.wifi_networks] == [
+        ("Casa", True, None, None),
+        ("Casa-Visitantes", True, None, None),
+    ]
+    assert main.wifi_networks is None  # the mesh's networks, reported once
+    # Read once an hour too: the next round has them from the state folder.
+    assert [w.ssid for w in collect(cfg)[1].wifi_networks] == ["Casa", "Casa-Visitantes"]
+    assert halo.calls.count("wlan") == 1
+
+
+def test_a_wifi_network_off_in_every_band_is_off(halo, cfg):
+    halo.answers["wlan"]["band2_4"]["guest"]["enable"] = False
+    halo.answers["wlan"]["band5_1"]["host"].pop("enable")
+    [casa, guest] = collect(cfg)[1].wifi_networks
+    assert (casa.enabled, guest.enabled) == (True, False)
+    halo.answers["wlan"]["band2_4"]["host"].pop("enable")
+    (cfg.state_dir / "networks.json").unlink()
+    assert collect(cfg)[1].wifi_networks[0].enabled is None  # never said
+
+
 def test_without_network_names_the_band_is_enough(halo, cfg):
     del halo.answers["wlan"]
     devices = collect(cfg)

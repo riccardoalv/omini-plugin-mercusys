@@ -10,6 +10,7 @@
 | Clients of each unit: Wi-Fi band and current traffic, or wired | Each phone, laptop or TV under the unit it uses |
 | Client names given in the Mercusys app | Names on the map |
 | Wi-Fi network names (main and guest) | Which network each client uses ("Home · 5 GHz"); the passwords in the same answer are never kept |
+| Wi-Fi networks of the mesh: one per SSID (its bands and the main/guest pair merged by name), on or off; no VLAN nor security (the answer gives none). Reported on the unit at the configured address, read once an hour | The Wi-Fi networks of the network |
 | CPU and memory of the unit at the configured address | Device panel |
 
 **Read-only:** besides signing in, the plugin only sends `read` operations. It never changes a setting, reboots or blocks a client.
