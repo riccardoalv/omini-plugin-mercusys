@@ -9,7 +9,15 @@ import re
 import time
 from typing import Any
 
-from omini_sdk import Config, Device, FdbEntry, Neighbor, PluginError, WirelessClient
+from omini_sdk import (
+    Config,
+    Device,
+    FdbEntry,
+    Interface,
+    Neighbor,
+    PluginError,
+    WirelessClient,
+)
 
 from omini_mercusys.client import Client
 
@@ -218,6 +226,9 @@ def build(
                 cpu_pct=pct(perf.get("cpu_usage")) if here else None,
                 mem_pct=pct(perf.get("mem_usage")) if here else None,
                 macs=[m],
+                # The port the wired clients are learned on (the unit does not
+                # say which of its sockets, nor its state or speed).
+                interfaces=[Interface(name="LAN", type="ethernet")] if fdb else None,
                 ips=[u["device_ip"]] if u.get("device_ip") else None,
                 wireless_clients=wifi or None,
                 fdb=fdb or None,

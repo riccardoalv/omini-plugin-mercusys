@@ -370,3 +370,16 @@ def test_only_a_refused_password_waits_before_signing_in_again(halo, cfg, reply,
         collect(cfg)
     broken["on"] = False
     assert collect(cfg)
+
+
+def test_wired_clients_are_on_the_units_lan_port(halo, cfg):
+    unit = next(k for k in halo.answers if k.startswith("client_list_"))
+    halo.answers[unit]["client_list"][0]["wire_type"] = "wired"
+    devices = collect(cfg)
+    [wired] = [d for d in devices if d.fdb]
+    assert {f.port for f in wired.fdb} == {"LAN"}
+    # The port the MAC table names exists, with nothing else said about it.
+    [lan] = wired.interfaces
+    assert lan.model_dump(exclude_none=True) == {"name": "LAN", "type": "ethernet"}
+    # A unit without wired clients gets no port it cannot describe.
+    assert all(d.interfaces is None for d in devices if not d.fdb)
