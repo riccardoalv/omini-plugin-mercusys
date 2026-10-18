@@ -32,6 +32,11 @@ class SessionExpired(Exception):
     pass
 
 
+class LoginRefused(PluginError):
+    """The unit refused the credentials: it counts the attempt, so the
+    plugin waits before signing in again with the same ones."""
+
+
 class Client:
     def __init__(
         self,
@@ -188,9 +193,10 @@ class Client:
             raise PluginError(f"{recent} (waiting a few minutes before signing in again)")
         try:
             self._login()
-        except PluginError as e:
-            if "connect" not in str(e) and "answer" not in str(e):
-                self._remember_refusal(str(e))
+        except LoginRefused as e:
+            # Only a refused password: a unit out of reach, busy, of another
+            # kind or with another admin signed in is asked again next time.
+            self._remember_refusal(str(e))
             raise
         self._remember_refusal(None)
 
@@ -226,9 +232,11 @@ class Client:
         code = data.get("error_code")
         if code == -5002:
             left = (data.get("result") or {}).get("attemptsAllowed", "?")
-            raise PluginError(f"wrong password ({left} attempts left before the unit locks)")
-        if code not in (0, None) or not (data.get("result") or {}).get("stok"):
-            raise PluginError(f"the unit refused the login (error {code})")
+            raise LoginRefused(f"wrong password ({left} attempts left before the unit locks)")
+        if code not in (0, None):
+            raise LoginRefused(f"the unit refused the login (error {code})")
+        if not (data.get("result") or {}).get("stok"):
+            raise PluginError("the unit accepted the login but gave no session")
         s.stok = data["result"]["stok"]
         s.cookie = self.http.cookies.get("sysauth") or ""
         self._save()

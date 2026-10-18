@@ -1,5 +1,6 @@
 import json
 
+import httpx
 import pytest
 from omini_sdk import PluginError
 
@@ -344,3 +345,28 @@ def test_waits_as_long_as_asked(cfg, tmp_path):
     assert wait_s(Config({"timeout_s": 90}, tmp_path)) == 90
     assert wait_s(Config({"timeout_s": 2}, tmp_path)) == 5
     assert wait_s(Config({"timeout_s": 600}, tmp_path)) == 120
+
+
+@pytest.mark.parametrize(
+    ("reply", "error"),
+    [
+        (lambda form: httpx.Response(403) if form == "login" else None, "another device"),
+        (lambda form: httpx.Response(200, json={}) if form == "keys" else None, "does not look"),
+        (lambda form: httpx.Response(500) if form == "login" else None, "answered 500"),
+    ],
+)
+def test_only_a_refused_password_waits_before_signing_in_again(halo, cfg, reply, error):
+    # A unit that is busy, not a Mercusys or has another admin signed in did
+    # not refuse the credentials: the next collection signs in at once.
+    real = halo.handler
+    broken = {"on": True}
+
+    def handler(request):
+        answer = reply(request.url.params.get("form")) if broken["on"] else None
+        return answer or real(request)
+
+    halo.handler = handler
+    with pytest.raises(PluginError, match=error):
+        collect(cfg)
+    broken["on"] = False
+    assert collect(cfg)
