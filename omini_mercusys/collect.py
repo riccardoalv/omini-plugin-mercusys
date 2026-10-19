@@ -17,6 +17,7 @@ from omini_sdk import (
     Neighbor,
     PluginError,
     WirelessClient,
+    optional,
 )
 
 from omini_mercusys.client import Client
@@ -208,9 +209,8 @@ def network_names(
                 return names, list(saved["wifi"]), list(saved["radios"])  # type: ignore[return-value]
     except (OSError, ValueError, KeyError, TypeError):
         pass
-    try:
-        wlan = c.read("/admin/wireless", "wlan")
-    except PluginError:
+    wlan = optional("Wi-Fi networks", lambda: c.read("/admin/wireless", "wlan"), None)
+    if wlan is None:
         return {}, [], []  # names are a nicety
     names, wifi, bands = networks(wlan), wifi_networks(wlan), radios(wlan)
     flat = {f"{b} {n}": s for (b, n), s in names.items()}
@@ -379,13 +379,12 @@ def collect(cfg: Config) -> list[Device]:
         if missing and main:
             by_unit[main] = by_unit.get(main, []) + missing
         ssids, wifi, bands = network_names(c, cfg)
-        try:
-            perf = c.read("/admin/network", "performance")
+        # Optional on some firmware.
+        perf = optional("CPU and memory", lambda: c.read("/admin/network", "performance"), None)
+        if perf is not None:
             c.keep("performance", perf)
-        except PluginError:
-            perf = {}  # optional on some firmware
         host = c.base.split("://", 1)[-1].split("/")[0].split(":")[0]
-        return build(units, by_unit, perf, host, ssids, wifi, bands)
+        return build(units, by_unit, perf or {}, host, ssids, wifi, bands)
     finally:
         c.close()
 

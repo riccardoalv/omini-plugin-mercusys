@@ -56,7 +56,7 @@ def test_session_is_reused_between_collections(halo, cfg):
     collect(cfg)
     assert halo.logins == 1
     saved = json.loads((cfg.state_dir / "session.json").read_text())
-    assert saved["session"]["stok"] == "stok1"
+    assert saved["data"]["session"]["stok"] == "stok1"
     assert "secret" not in json.dumps(saved)  # never the password itself
 
 
@@ -477,3 +477,47 @@ def test_declares_no_change():
     from pathlib import Path
 
     assert "changes" not in (Path(__file__).parent.parent / "plugin.yaml").read_text()
+
+
+def test_a_busy_unit_is_asked_again(halo, cfg, monkeypatch):
+    import omini_mercusys.client as client_module
+
+    monkeypatch.setattr(client_module, "RETRY_PAUSE_S", 0)
+    real = halo.handler
+    busy = {"left": 1}
+
+    def handler(request):
+        if request.url.params.get("form") == "device_list" and busy["left"]:
+            busy["left"] -= 1
+            return httpx.Response(503)
+        return real(request)
+
+    halo.handler = handler
+    assert collect(cfg) and busy["left"] == 0
+
+
+def test_a_refused_password_is_kept_apart_from_the_session(halo, cfg):
+    collect(cfg)
+    cfg["password"] = "nope"
+    with pytest.raises(PluginError, match="wrong password"):
+        collect(cfg)
+    refused = json.loads((cfg.state_dir / "login-refused.json").read_text())
+    assert "nope" not in json.dumps(refused) and "wrong password" in refused["error"]
+    cfg["password"] = "secret"
+    collect(cfg)  # a good login forgets it
+    assert not (cfg.state_dir / "login-refused.json").exists()
+
+
+def test_a_session_saved_by_an_older_version_is_replaced(halo, cfg):
+    cfg.state_dir.mkdir(parents=True, exist_ok=True)
+    (cfg.state_dir / "session.json").write_text(
+        json.dumps({"password_hash": "x", "session": {"stok": "old"}})
+    )
+    collect(cfg)
+    assert halo.logins == 1
+
+
+def test_an_optional_read_the_unit_lacks_is_skipped(halo, cfg):
+    del halo.answers["performance"]  # answered "no such callback"
+    main, sat = collect(cfg)
+    assert main.cpu_pct is None and sat.cpu_pct is None
