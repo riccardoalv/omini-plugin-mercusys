@@ -1,6 +1,6 @@
 id: mercusys
 name: Mercusys Halo
-version: 0.1.5
+version: 0.2.0
 protocol: 1
 entrypoint: main.py
 timeout_s: 300
