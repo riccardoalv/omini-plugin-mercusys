@@ -157,8 +157,10 @@ RADIO_NAMES = {
 
 
 def channel_of(value: Any) -> tuple[int | None, bool | None]:
-    """(channel, automatic) of a band's ``channel``: 0 or "auto" is automatic;
-    an unknown value says neither."""
+    """(channel, automatic) of a band's ``channel``: 0 or "auto" is automatic.
+    A number is the channel the unit is on, but the answer does not say
+    whether it chose it itself (the Halo app has no manual channel): whether
+    it is automatic stays unknown. An unknown value says neither."""
     if isinstance(value, bool):
         return None, None
     if isinstance(value, str):
@@ -172,7 +174,7 @@ def channel_of(value: Any) -> tuple[int | None, bool | None]:
         return None, None
     if value == 0:
         return None, True
-    return (value, False) if 1 <= value <= 233 else (None, None)
+    return (value, None) if 1 <= value <= 233 else (None, None)
 
 
 def radios(wlan: dict[str, Any]) -> list[dict[str, Any]]:

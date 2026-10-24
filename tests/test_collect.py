@@ -429,8 +429,8 @@ def test_manifest_matches_what_is_read():
 def test_the_mesh_s_radios_on_the_main_unit(halo, cfg):
     main, sat = collect(cfg)
     assert [r.model_dump(exclude_none=True) for r in main.radios] == [
-        {"name": "2.4 GHz", "band": "2.4ghz", "channel": 6, "auto": False},
-        {"name": "5 GHz", "band": "5ghz", "channel": 36, "auto": False},
+        {"name": "2.4 GHz", "band": "2.4ghz", "channel": 6},
+        {"name": "5 GHz", "band": "5ghz", "channel": 36},
     ]
     assert sat.radios is None  # the mesh's channels, reported once
     # Kept with the network names: the next round has them too.
@@ -451,9 +451,9 @@ def test_a_channel_on_the_band_and_one_unknown(halo, cfg):
     wlan["band5_1"]["host"]["channel"] = "dfs?"
     wlan["band5_2"] = {"host": {"ssid": "Q2FzYQ==", "enable": True, "channel": 149}}
     assert [r.model_dump(exclude_none=True) for r in collect(cfg)[0].radios] == [
-        {"name": "2.4 GHz", "band": "2.4ghz", "channel": 11, "auto": False},
+        {"name": "2.4 GHz", "band": "2.4ghz", "channel": 11},
         {"name": "5 GHz", "band": "5ghz"},
-        {"name": "5 GHz-2", "band": "5ghz", "channel": 149, "auto": False},
+        {"name": "5 GHz-2", "band": "5ghz", "channel": 149},
     ]
 
 
